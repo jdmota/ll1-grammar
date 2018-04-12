@@ -1,0 +1,16 @@
+typestate NAME {
+
+  NAME = {
+    TYPE NAME ( TYPE , TYPE ) : end ,
+    TYPE NAME ( TYPE , TYPE ) : < NAME : NAME , NAME : end >
+  }
+
+  NAME = {
+    TYPE NAME ( TYPE ) : {
+      TYPE NAME ( ) : {
+
+      }
+    }
+  }
+
+}

@@ -363,8 +363,8 @@ class Grammar {
 const path = require( "path" );
 const fs = require( "fs" );
 
-const grammarText = fs.readFileSync( path.resolve( __dirname, "grammar.txt" ), "utf8" );
-const exampleText = fs.readFileSync( path.resolve( __dirname, "example.txt" ), "utf8" );
+const grammarText = fs.readFileSync( path.resolve( __dirname, "grammar" ), "utf8" );
+const exampleText = fs.readFileSync( path.resolve( __dirname, "example" ), "utf8" );
 
 const grammar = new Grammar( grammarText );
 
