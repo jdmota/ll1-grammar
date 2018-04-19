@@ -174,12 +174,15 @@ class Grammar {
       throw new Error( `Variable ${variable} is left recursive` );
     }
 
-    // Cache
-    const cache = this.firstCache.get( variable );
-    if ( cache ) return cache;
-
     const result = new Set();
-    this.firstCache.set( variable, result );
+
+    // Cache
+    if ( variables.length === 1 ) {
+      const cache = this.firstCache.get( variable );
+      if ( cache ) return cache;
+
+      this.firstCache.set( variable, result );
+    }
 
     // Compute
 
