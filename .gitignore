@@ -1,3 +1,9 @@
+ocaml_version/_build
+ocaml_version/.settings
+ocaml_version/.paths
+ocaml_version/.project
+ocaml_version/.projectSettings
+
 *.txt
 *.log
 __dev__
