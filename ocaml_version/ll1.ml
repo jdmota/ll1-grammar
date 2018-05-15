@@ -1,6 +1,7 @@
 (* Utils *)
 
-module SS = Set.Make(String);;
+module SS = Set.Make(String);; (* Set<String> *)
+module M = Map.Make(String);; (* Map<String, T> *)
 
 let rec foreach array fn =
 	match array with
@@ -35,7 +36,7 @@ exception NotDeterministic of string;;
 exception LeftRecursive of string;;
 
 type rule = { name: string; rightside: string list };;
-type grammar = { rulesByName: ( string * rule list ) list; rules: rule list; nonTerminals: SS.t };;
+type grammar = { rulesByName: (rule list) M.t; rules: rule list; nonTerminals: SS.t };;
 
 let isTerminal variable grammar = SS.mem variable grammar.nonTerminals = false;;
 
@@ -46,7 +47,7 @@ let rec canBeEmpty variables grammar =
 
 and canBeEmptyVariable variable grammar =
 	if isTerminal variable grammar then false else
-		let rules = getRules variable grammar.rulesByName in List.exists (fun rule -> canBeEmpty rule.rightside grammar) rules;;
+		let rules = M.find variable grammar.rulesByName in List.exists (fun rule -> canBeEmpty rule.rightside grammar) rules;;
 
 let rec first2 variables set grammar =
 	match variables with
@@ -57,7 +58,7 @@ and firstRest variables set grammar=
 	if canBeEmpty variables grammar then first2 variables set grammar else []
 
 and firstVariable variable set grammar =
-	if SS.mem variable set then raise (LeftRecursive variable) else mapConcat (getRules variable grammar.rulesByName) (fun rule -> first2 rule.rightside (SS.add variable set) grammar);;
+	if SS.mem variable set then raise (LeftRecursive variable) else mapConcat (M.find variable grammar.rulesByName) (fun rule -> first2 rule.rightside (SS.add variable set) grammar);;
 
 let first variables grammar = first2 variables SS.empty grammar;;
 		
@@ -75,30 +76,73 @@ let join set array = reduce set array (fun v set -> if SS.mem v set then raise (
 
 let checkDeterminismInName rulesInName grammar = reduce SS.empty rulesInName (fun rule set -> join set (lookahead rule grammar));;
 
-let checkDeterminism grammar = List.for_all (fun (a, b) -> ignore (checkDeterminismInName b grammar); true) grammar.rulesByName;;
+let checkDeterminism grammar = M.for_all (fun a b -> (ignore (checkDeterminismInName b grammar); true)) grammar.rulesByName;;
 
 let collectAllRules rulesByName = mapConcat rulesByName (fun (a, b) -> b);;
 
-let collectAllNonTerminals rulesByName = reduce SS.empty rulesByName (fun (a, b) set -> SS.add a set);;
+let collectAllNonTerminals rulesByName = reduce SS.empty rulesByName (fun rule set -> SS.add rule.name set);;
 
-let buildGrammar rulesByName =
+let collectRulesByName rules =
+	reduce M.empty rules (fun rule map -> let list = if M.mem rule.name map then rule::(M.find rule.name map) else rule::[] in M.add rule.name list map );;
+
+let buildGrammar rules =
 	{
-  	rulesByName;
-  	rules = collectAllRules rulesByName;
-  	nonTerminals = collectAllNonTerminals rulesByName
+  	rulesByName = collectRulesByName rules;
+  	rules;
+  	nonTerminals = collectAllNonTerminals rules
   };;
 
 let grammar = buildGrammar [
-  ( "I", [
-    { name = "I"; rightside = [ "("; "I"; "*"; "F"; ")" ] };
-    { name = "I"; rightside = [ "F" ] }
-	] );
-  ( "F", [
-    { name = "F"; rightside = [ "x" ] }
-  ] )
+  { name = "TYPESTATE"; rightside = [ "typestate"; "name"; "{"; "TYPESTATE_BODY"; "}" ] };
+	
+  { name = "TYPESTATE_BODY"; rightside = [ "empty" ] };
+	{ name = "TYPESTATE_BODY"; rightside = [ "STATE_DEF"; "TYPESTATE_BODY" ] };
+	
+	{ name = "STATE_DEF_NAME"; rightside = [ "name"; "="; "STATE_DEF" ] };
+	
+	{ name = "STATE_DEF"; rightside = [ "{"; "STATES"; "}" ] };
+	{ name = "STATES"; rightside = [ "empty" ] };
+	{ name = "STATES"; rightside = [ "METHOD"; "STATE_NEXT" ] };
+	{ name = "STATE_NEXT"; rightside = [ "empty" ] };
+	{ name = "STATE_NEXT"; rightside = [ ","; "METHOD"; "STATE_NEXT" ] };
+	
+	{ name = "METHOD"; rightside = [ "type"; "name"; "("; "ARGUMENTS"; ")"; ":"; "W" ] };
+	
+	{ name = "ARGUMENTS"; rightside = [ "empty" ] };
+	{ name = "ARGUMENTS"; rightside = [ "type"; "ARGUMENTS_NEXT" ] };
+	{ name = "ARGUMENTS_NEXT"; rightside = [ "empty" ] };
+	{ name = "ARGUMENTS_NEXT"; rightside = [ ","; "type"; "ARGUMENTS_NEXT" ] };
+	
+	{ name = "W"; rightside = [ "end" ] };
+	{ name = "W"; rightside = [ "STATE_DEF" ] };
+	{ name = "W"; rightside = [ "<"; "OPTIONS"; ">" ] };
+	{ name = "W"; rightside = [ "name" ] };
+	
+	{ name = "OPTIONS"; rightside = [ "LABEL"; "OPTIONS_NEXT" ] };
+	{ name = "OPTIONS_NEXT"; rightside = [ "empty" ] };
+	{ name = "OPTIONS_NEXT"; rightside = [ ","; "OPTIONS" ] };
+	
+	{ name = "LABEL"; rightside = [ "name"; ":"; "LABEL_TO" ] };
+	{ name = "LABEL_TO"; rightside = [ "end" ] };
+	{ name = "LABEL_TO"; rightside = [ "name" ] };
+	{ name = "LABEL_TO"; rightside = [ "STATE_DEF" ] };
 ];;
 
 assert (checkDeterminism grammar);;
 
-print_string "Ok!";;
+let parseTable grammar =
+	reduce M.empty grammar.rules (fun rule map -> let map2 = if M.mem rule.name map then M.find rule.name map else M.empty in
+  	M.add rule.name (
+  		let newMap2 = reduce map2 (lookahead rule grammar) (fun s map -> M.add s rule map) in
+				if canBeEmptyVariable rule.name grammar then M.add "empty" rule newMap2 else newMap2
+  	) map
+	);;
+
+let listToStr list = reduce "" list (fun el str -> el ^ (if str = "" then "" else " ") ^ str);;
+
+print_string ("Start: " ^ (match grammar.rules with rule::rest -> rule.name | [] -> "") ^ "\n\n");;
+
+M.iter (fun name map -> M.iter (fun s rule -> print_string ("On " ^ name ^ ", if it finds \"" ^ s ^ "\", apply \"" ^ listToStr rule.rightside ^ "\"\n")) map) (parseTable grammar);;
+
+print_string "\nOk!";;
 
